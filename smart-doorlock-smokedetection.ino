@@ -359,9 +359,7 @@ void loop() {
       }
 
       break;
-
-
-    // ----- WRONG PASSWORD -----
+    // WRONG PASSWORD
 
     case WRONG_PASSWORD:
 
@@ -404,8 +402,6 @@ void loop() {
       }
 
       break;
-
-
     // ----- 60-SECOND LOCKOUT -----
 
     case LOCKOUT: {
