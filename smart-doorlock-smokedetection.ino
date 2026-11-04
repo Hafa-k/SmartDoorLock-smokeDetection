@@ -4,10 +4,10 @@
 #include <Keypad.h>
 #include <Servo.h>
 
-
+// ========== LCD ==========
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-//PIN CONNECTIONS 
+// ========== PIN CONNECTIONS ==========
 const int SERVO_PIN = 10;
 const int IR_PIN = 11;
 const int GAS_PIN = A0;
@@ -17,11 +17,13 @@ const int RED_PIN = A1;
 const int GREEN_PIN = A2;
 const int BLUE_PIN = A3;
 
+// Change to LOW if your IR sensor detects with LOW.
 const int IR_DETECTED_LEVEL = HIGH;
 
+// ========== SERVO ==========
 Servo doorServo;
 
-//KEYPAD 
+// ========== KEYPAD ==========
 const byte ROWS = 4;
 const byte COLS = 4;
 
@@ -43,21 +45,21 @@ Keypad keypad = Keypad(
   COLS
 );
 
-
+// ========== PASSWORD ==========
 String correctPassword = "2222";
 String enteredPassword = "";
 
 int wrongAttempts = 0;
 const int MAX_ATTEMPTS = 3;
 
-//GAS SENSOR 
+// ========== GAS SENSOR ==========
 const int GAS_ALARM_THRESHOLD = 400;
 const int GAS_CLEAR_THRESHOLD = 350;
 
 int gasValue = 0;
 bool gasEmergency = false;
 
-//TIMERS 
+// ========== TIMERS ==========
 unsigned long stateTime = 0;
 unsigned long lastGasCheck = 0;
 unsigned long lastCountdownUpdate = 0;
@@ -68,7 +70,7 @@ unsigned long lastIRDebug = 0;
 
 bool buzzerTimed = false;
 
-// SYSTEM STATES 
+// ========== SYSTEM STATES ==========
 enum SystemState {
   WAITING,
   PASSWORD_ENTRY,
@@ -80,7 +82,8 @@ enum SystemState {
 
 SystemState currentState = WAITING;
 
-//RGB LED
+// ========== RGB LED ==========
+// Assumes common cathode RGB LED.
 
 void setLED(bool red, bool green, bool blue) {
   digitalWrite(RED_PIN, red ? HIGH : LOW);
@@ -88,7 +91,7 @@ void setLED(bool red, bool green, bool blue) {
   digitalWrite(BLUE_PIN, blue ? HIGH : LOW);
 }
 
-//  BUZZER 
+// ========== BUZZER ==========
 
 void beepFor(unsigned long duration) {
   tone(BUZZER_PIN, 1000);
@@ -105,7 +108,7 @@ void updateBuzzer() {
   }
 }
 
-// LCD FUNCTIONS 
+// ========== LCD FUNCTIONS ==========
 
 void screenOff() {
   lcd.clear();
@@ -122,7 +125,7 @@ void showPasswordScreen() {
   enteredPassword = "";
 }
 
-// black-screen 
+// Return to black-screen waiting mode
 void returnToWaiting() {
   enteredPassword = "";
 
@@ -135,6 +138,7 @@ void returnToWaiting() {
   Serial.println("Waiting for next person...");
 }
 
+// ========== SETUP ==========
 
 void setup() {
 
@@ -173,7 +177,7 @@ void setup() {
   Serial.println("IR sensor monitoring started.");
 }
 
-//MAIN LOOP
+// ========== MAIN LOOP ==========
 
 void loop() {
 
@@ -183,7 +187,7 @@ void loop() {
 
   updateBuzzer();
 
-  // IR SENSOR DEBUG
+  // ========== IR SENSOR DEBUG ==========
 
   if (now - lastIRDebug >= 500) {
     lastIRDebug = now;
@@ -192,7 +196,8 @@ void loop() {
     Serial.println(digitalRead(IR_PIN));
   }
 
-  // GAS SENSOR 
+  // ========== GAS SENSOR ==========
+
   if (now - lastGasCheck >= 500) {
 
     lastGasCheck = now;
@@ -246,16 +251,15 @@ void loop() {
     return;
   }
 
+  // ========== SYSTEM STATES ==========
 
   switch (currentState) {
 
-
+    // ----- WAITING FOR PERSON -----
 
     case WAITING:
 
       if (digitalRead(IR_PIN) == IR_DETECTED_LEVEL) {
-
-        lcd.backlight();
 
         showPasswordScreen();
 
@@ -316,15 +320,17 @@ void loop() {
 
             wrongAttempts++;
 
+            lcd.backlight();
             lcd.clear();
-            lcd.print("Wrong Password");
+            lcd.print("WRONG PASSWORD");
             lcd.setCursor(0, 1);
-            lcd.print("Attempts: ");
+            lcd.print("ATTEMPTS: ");
             lcd.print(wrongAttempts);
             lcd.print("/3");
 
             setLED(true, false, false);
 
+            // One-second warning
             beepFor(1000);
 
             stateTime = now;
@@ -359,10 +365,13 @@ void loop() {
       }
 
       break;
-    // WRONG PASSWORD
+
+
+    // ----- WRONG PASSWORD -----
 
     case WRONG_PASSWORD:
 
+      // Start lockout after 3 wrong attempts
       if (wrongAttempts >= MAX_ATTEMPTS &&
           now - stateTime >= 1500) {
 
@@ -377,6 +386,7 @@ void loop() {
 
         setLED(true, false, false);
 
+        // Two-second lockout warning
         beepFor(2000);
 
         currentState = LOCKOUT;
@@ -384,24 +394,24 @@ void loop() {
         Serial.println("60-second lockout started.");
       }
 
+      // If fewer than 3 wrong attempts,
+      // return directly to password entry.
+      // NEVER turn the LCD black here.
       else if (wrongAttempts < MAX_ATTEMPTS &&
                now - stateTime >= 1500) {
 
-        if (digitalRead(IR_PIN) == IR_DETECTED_LEVEL) {
+        showPasswordScreen();
 
-          showPasswordScreen();
+        setLED(false, false, true);
 
-          setLED(false, false, true);
+        currentState = PASSWORD_ENTRY;
 
-          currentState = PASSWORD_ENTRY;
-
-        } else {
-
-          returnToWaiting();
-        }
+        Serial.println("Try password again.");
       }
 
       break;
+
+
     // ----- 60-SECOND LOCKOUT -----
 
     case LOCKOUT: {
@@ -447,11 +457,12 @@ void loop() {
 
       if (now - stateTime >= 5000) {
 
+        // Lock the door
         doorServo.write(0);
 
         Serial.println("Door locked.");
 
-        // Show goodbye after door locks
+        // Show goodbye message after locking
         lcd.clear();
         lcd.print("GOODBYE!");
         lcd.setCursor(0, 1);
@@ -475,7 +486,7 @@ void loop() {
 
         Serial.println("Goodbye message finished.");
 
-        // LCD becomes black and waits for next person
+        // Turn LCD black after goodbye
         returnToWaiting();
       }
 
@@ -483,5 +494,3 @@ void loop() {
 
   }
 }
-
-
